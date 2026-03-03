@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案件要約ツール</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Yu Gothic UI','Meiryo',sans-serif;background:#f0f2f5;min-height:100vh;padding:24px 16px}
+.wrap{max-width:800px;margin:0 auto}
+h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:24px 28px;margin-bottom:16px}
+.section-title{font-size:13px;font-weight:600;color:#555;margin-bottom:8px}
+
+/* API Key */
+.api-key-row{display:flex;gap:8px;align-items:center}
+.api-key-row input{flex:1;padding:8px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:14px;outline:none}
+.api-key-row input:focus{border-color:#4a6cf7}
+.api-key-row button,.btn{padding:8px 16px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-primary{background:#4a6cf7;color:#fff}
+.btn-primary:hover{background:#3a5ce5}
+.btn-primary:disabled{background:#b0b8c9;cursor:not-allowed}
+.btn-success{background:#27ae60;color:#fff}
+.btn-success:hover{background:#219a52}
+.btn-outline{background:#fff;color:#555;border:1.5px solid #ccc}
+.btn-outline:hover{background:#f5f5f5}
+.api-status{font-size:12px;margin-top:6px}
+.api-status.ok{color:#27ae60}
+.api-status.ng{color:#e74c3c}
+
+/* Dropzone */
+.dropzone{border:2.5px dashed #b0b8c9;border-radius:12px;padding:36px 20px;text-align:center;color:#888;font-size:15px;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:12px}
+.dropzone.dragover{border-color:#4a6cf7;background:#eef2ff;color:#4a6cf7}
+.dropzone input{display:none}
+.dropzone-icon{font-size:32px;margin-bottom:4px;display:block;color:#b0b8c9}
+
+/* File list */
+.file-list{margin-bottom:8px}
+.file-item{display:flex;align-items:center;background:#f8f9fb;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px;gap:8px}
+.file-item .fname{flex:1;color:#333;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-item .fsize{color:#888;font-size:12px;flex-shrink:0}
+.file-item .fremove{background:none;border:none;color:#999;font-size:16px;cursor:pointer;padding:0 4px}
+.file-item .fremove:hover{color:#e74c3c}
+.file-stats{font-size:12px;color:#888;margin-bottom:12px}
+
+/* Result */
+.result-area{display:none}
+.result-content{font-size:14px;line-height:1.8;color:#222}
+.result-content h1{font-size:20px;text-align:left;margin:20px 0 10px;color:#1a1a2e}
+.result-content h2{font-size:17px;color:#1a1a2e;border-bottom:2px solid #4a6cf7;padding-bottom:4px;margin:20px 0 10px}
+.result-content h3{font-size:15px;color:#333;margin:14px 0 6px}
+.result-content p{margin:6px 0}
+.result-content strong{color:#1a1a2e}
+.result-content ul{padding-left:20px;margin:6px 0}
+.result-content li{margin:3px 0}
+.result-content table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+.result-content th,.result-content td{border:1px solid #ccc;padding:6px 10px;text-align:left;vertical-align:top}
+.result-content th{background:#f0f2f5;font-weight:600}
+.result-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+
+/* Loading */
+.loading{text-align:center;padding:20px;color:#888}
+.loading .spinner{display:inline-block;width:24px;height:24px;border:3px solid #e0e0e0;border-top-color:#4a6cf7;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px}
+.error-msg{color:#e74c3c;font-size:14px;padding:10px;background:#fef2f2;border-radius:8px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>案件要約ツール</h1>
+
+  <!-- API Key -->
+  <div class="card">
+    <div class="section-title">Gemini APIキー</div>
+    <div class="api-key-row">
+      <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
+      <button class="btn btn-primary btn-sm" id="btnSaveKey">保存</button>
+    </div>
+    <div class="api-status" id="apiStatus"></div>
+    <div style="font-size:11px;color:#aaa;margin-top:4px">
+      <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#4a6cf7">Google AI Studio</a> で無料取得できます。キーはブラウザ内のみに保存されます。
+    </div>
+  </div>
+
+  <!-- File Upload -->
+  <div class="card">
+    <div class="section-title">案件資料（PDF / JPEG / PNG）</div>
+    <div class="dropzone" id="dropzone">
+      <span class="dropzone-icon">&#128206;</span>
+      ファイルをドラッグ＆ドロップ<br>
+      <span style="font-size:12px;color:#aaa">またはクリックして選択（複数可）</span>
+      <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" multiple>
+    </div>
+    <div class="file-list" id="fileList"></div>
+    <div class="file-stats" id="fileStats"></div>
+    <button class="btn btn-primary" id="btnGenerate" disabled style="width:100%;padding:14px;font-size:16px">要約を生成</button>
+  </div>
+
+  <!-- Results -->
+  <div class="card result-area" id="resultArea">
+    <div class="section-title">生成結果</div>
+    <div id="loadingIndicator" class="loading" style="display:none">
+      <div class="spinner"></div>
+      <div class="loading-text">分析中...</div>
+    </div>
+    <div class="result-content" id="resultContent"></div>
+    <div id="errorMsg" class="error-msg" style="display:none"></div>
+    <div class="result-actions" id="resultActions" style="display:none">
+      <button class="btn btn-success" id="btnDownloadWord">Wordダウンロード (.doc)</button>
+      <button class="btn btn-outline" id="btnCopy">テキストをコピー</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Constants =====
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+const SYSTEM_PROMPT = `あなたは日本の法律事務に精通した法務アシスタントです。
+弁護士が提出した証拠書類・資料を分析し、案件の要約と時系列を作成します。
+
+ルール:
+1. 法的に重要な事実のみを抽出すること（推測や法的評価は含めない）
+2. 日付は必ず「YYYY年MM月DD日」形式で統一すること（不明なら「日付不明」）
+3. 当事者名・固有名詞は書類の記載どおりに正確に記載すること
+4. 金額は書類記載どおりに記載すること
+5. 書類に記載のない事実は含めないこと`;
+
+const ANALYSIS_PROMPT = `以下の証拠書類をすべて分析し、以下の2つを作成してください。
+
+## 1. 案件の要約
+
+以下の構成で作成してください：
+
+### 当事者
+原告・被告・関係者の氏名・名称を記載
+
+### 案件の種類
+例：貸金請求、損害賠償請求、離婚、相続など
+
+### 請求の概要
+何を求めているか
+
+### 事実の概要
+時系列に沿った事実関係の概要を段落形式で記載
+
+### 主要な争点
+書類から読み取れる争点
+
+### 証拠の概要
+どのような証拠が提出されているかの一覧（箇条書き）
+
+## 2. 時系列表
+
+以下のマークダウンテーブル形式で、日付の古い順に整理してください：
+
+| 日付 | 出来事 | 関連書類 |
+|------|--------|----------|
+| YYYY年MM月DD日 | 出来事の内容 | ファイル名 |
+
+注意：
+- 各書類のファイル名を「関連書類」欄に記載してください
+- 同じ日付の出来事は別の行に分けてください
+- 日付が不明な場合は「日付不明」と記載してください`;
+
+// ===== State =====
+let files = [];
+let rawResultText = '';
+
+// ===== Elements =====
+const apiKeyInput = document.getElementById('apiKeyInput');
+const btnSaveKey = document.getElementById('btnSaveKey');
+const apiStatus = document.getElementById('apiStatus');
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileListEl = document.getElementById('fileList');
+const fileStats = document.getElementById('fileStats');
+const btnGenerate = document.getElementById('btnGenerate');
+const resultArea = document.getElementById('resultArea');
+const loadingIndicator = document.getElementById('loadingIndicator');
+const resultContent = document.getElementById('resultContent');
+const errorMsg = document.getElementById('errorMsg');
+const resultActions = document.getElementById('resultActions');
+const btnDownloadWord = document.getElementById('btnDownloadWord');
+const btnCopy = document.getElementById('btnCopy');
+
+// ===== API Key Management =====
+function loadApiKey() {
+  const key = localStorage.getItem('gemini_api_key') || '';
+  if (key) {
+    apiKeyInput.value = key;
+    apiStatus.textContent = '保存済み';
+    apiStatus.className = 'api-status ok';
+  }
+  return key;
+}
+
+function saveApiKey() {
+  const key = apiKeyInput.value.trim();
+  if (!key) return;
+  localStorage.setItem('gemini_api_key', key);
+  apiStatus.textContent = '保存しました';
+  apiStatus.className = 'api-status ok';
+  updateGenerateButton();
+}
+
+function getApiKey() {
+  return apiKeyInput.value.trim() || localStorage.getItem('gemini_api_key') || '';
+}
+
+btnSaveKey.addEventListener('click', saveApiKey);
+apiKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveApiKey(); });
+
+// ===== File Upload =====
+function isAccepted(f) {
+  const n = f.name.toLowerCase();
+  return n.endsWith('.pdf') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.png');
+}
+
+function addFiles(inputFiles) {
+  for (const f of inputFiles) {
+    if (isAccepted(f)) files.push(f);
+  }
+  renderFileList();
+  updateGenerateButton();
+}
+
+function removeFile(idx) {
+  files.splice(idx, 1);
+  renderFileList();
+  updateGenerateButton();
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderFileList() {
+  fileListEl.innerHTML = '';
+  files.forEach((f, i) => {
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `<span class="fname">${f.name}</span><span class="fsize">${formatSize(f.size)}</span><button class="fremove" data-idx="${i}">&times;</button>`;
+    fileListEl.appendChild(div);
+  });
+  fileListEl.querySelectorAll('.fremove').forEach(btn => {
+    btn.addEventListener('click', () => removeFile(parseInt(btn.dataset.idx)));
+  });
+
+  const totalSize = files.reduce((s, f) => s + f.size, 0);
+  if (files.length > 0) {
+    const estTokens = Math.round(totalSize / 4);
+    const estCostInput = (estTokens / 1000000) * 0.10;
+    const estCostOutput = (8000 / 1000000) * 0.40;
+    const estCostYen = Math.round((estCostInput + estCostOutput) * 150);
+    fileStats.textContent = `${files.length}ファイル / ${formatSize(totalSize)} / 推定費用: ${estCostYen < 1 ? '¥1以下' : '¥' + estCostYen}`;
+  } else {
+    fileStats.textContent = '';
+  }
+}
+
+function updateGenerateButton() {
+  btnGenerate.disabled = files.length === 0 || !getApiKey();
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+// ===== File to Base64 =====
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function getMimeType(file) {
+  const n = file.name.toLowerCase();
+  if (n.endsWith('.pdf')) return 'application/pdf';
+  if (n.endsWith('.png')) return 'image/png';
+  return 'image/jpeg';
+}
+
+// ===== Gemini API Call (Streaming) =====
+async function callGeminiStream(apiKey, parts, onChunk) {
+  const url = `${API_BASE}/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ parts: parts }],
+    generationConfig: {
+      maxOutputTokens: 8192,
+      temperature: 0.1,
+    }
+  };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    let errText = '';
+    try {
+      const errJson = await resp.json();
+      errText = errJson.error?.message || JSON.stringify(errJson);
+    } catch { errText = `HTTP ${resp.status}`; }
+    throw new Error(errText);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const json = JSON.parse(data);
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (text) {
+          fullText += text;
+          onChunk(fullText);
+        }
+      } catch {}
+    }
+  }
+
+  return fullText;
+}
+
+// ===== Generate Summary =====
+btnGenerate.addEventListener('click', async () => {
+  const apiKey = getApiKey();
+  if (!apiKey || files.length === 0) return;
+
+  // Show loading
+  resultArea.style.display = '';
+  loadingIndicator.style.display = '';
+  resultContent.innerHTML = '';
+  resultActions.style.display = 'none';
+  errorMsg.style.display = 'none';
+  btnGenerate.disabled = true;
+  btnGenerate.textContent = '分析中...';
+
+  try {
+    // Build parts
+    const parts = [];
+    for (const f of files) {
+      const b64 = await fileToBase64(f);
+      parts.push({
+        inline_data: { mime_type: getMimeType(f), data: b64 }
+      });
+      parts.push({ text: `[ファイル名: ${f.name}]` });
+    }
+    parts.push({ text: ANALYSIS_PROMPT });
+
+    // Update loading text
+    loadingIndicator.querySelector('.loading-text').textContent = `${files.length}ファイルを分析中...`;
+
+    // Call Gemini with streaming
+    rawResultText = await callGeminiStream(apiKey, parts, (partialText) => {
+      loadingIndicator.style.display = 'none';
+      resultContent.innerHTML = renderMarkdown(partialText);
+    });
+
+    // Show final result
+    loadingIndicator.style.display = 'none';
+    resultContent.innerHTML = renderMarkdown(rawResultText);
+    resultActions.style.display = '';
+
+  } catch (err) {
+    loadingIndicator.style.display = 'none';
+    errorMsg.style.display = '';
+    if (err.message.includes('API_KEY_INVALID') || err.message.includes('API key not valid')) {
+      errorMsg.textContent = 'APIキーが無効です。正しいキーを入力してください。';
+    } else {
+      errorMsg.textContent = 'エラー: ' + err.message;
+    }
+  }
+
+  btnGenerate.disabled = false;
+  btnGenerate.textContent = '要約を生成';
+});
+
+// ===== Markdown to HTML =====
+function renderMarkdown(md) {
+  const lines = md.split('\n');
+  let html = '';
+  let inTable = false;
+  let inList = false;
+  let tableStarted = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Heading
+    if (line.startsWith('### ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (inTable) { html += '</tbody></table>'; inTable = false; }
+      html += '<h3>' + escapeAndBold(line.slice(4)) + '</h3>';
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (inTable) { html += '</tbody></table>'; inTable = false; }
+      html += '<h2>' + escapeAndBold(line.slice(3)) + '</h2>';
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (inTable) { html += '</tbody></table>'; inTable = false; }
+      html += '<h1>' + escapeAndBold(line.slice(2)) + '</h1>';
+      continue;
+    }
+
+    // Table
+    if (line.trim().startsWith('|')) {
+      if (inList) { html += '</ul>'; inList = false; }
+
+      // Skip separator row (|---|---|)
+      if (/^\|[\s\-:]+\|/.test(line.trim()) && !/[a-zA-Z\u3000-\u9fff]/.test(line)) continue;
+
+      const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim());
+
+      if (!inTable) {
+        html += '<table><thead><tr>';
+        cells.forEach(c => { html += '<th>' + escapeAndBold(c) + '</th>'; });
+        html += '</tr></thead><tbody>';
+        inTable = true;
+        tableStarted = true;
+      } else {
+        html += '<tr>';
+        cells.forEach(c => { html += '<td>' + escapeAndBold(c) + '</td>'; });
+        html += '</tr>';
+      }
+      continue;
+    } else if (inTable) {
+      html += '</tbody></table>';
+      inTable = false;
+    }
+
+    // List
+    if (/^[-*] /.test(line.trim())) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += '<li>' + escapeAndBold(line.trim().slice(2)) + '</li>';
+      continue;
+    } else if (inList && line.trim() === '') {
+      html += '</ul>';
+      inList = false;
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      if (inList) { html += '</ul>'; inList = false; }
+      continue;
+    }
+
+    // Regular paragraph
+    html += '<p>' + escapeAndBold(line) + '</p>';
+  }
+
+  if (inList) html += '</ul>';
+  if (inTable) html += '</tbody></table>';
+
+  return html;
+}
+
+function escapeAndBold(text) {
+  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return text;
+}
+
+// ===== Word Download =====
+btnDownloadWord.addEventListener('click', () => {
+  const htmlBody = resultContent.innerHTML;
+  const today = new Date().toLocaleDateString('ja-JP');
+
+  const doc = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Normal</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page{size:A4;margin:2cm}
+body{font-family:"游ゴシック","Yu Gothic",sans-serif;font-size:10.5pt;line-height:1.8;color:#222}
+h1{font-size:18pt;text-align:center;margin:0 0 12pt;color:#111}
+h2{font-size:14pt;border-bottom:2pt solid #333;padding-bottom:3pt;margin:18pt 0 8pt;color:#111}
+h3{font-size:12pt;margin:12pt 0 4pt;color:#222}
+p{margin:4pt 0}
+ul{padding-left:20pt;margin:4pt 0}
+li{margin:2pt 0}
+table{border-collapse:collapse;width:100%;margin:8pt 0;font-size:9.5pt}
+th,td{border:1pt solid #999;padding:4pt 8pt;vertical-align:top}
+th{background-color:#f0f0f0;font-weight:bold}
+.disclaimer{font-size:8pt;color:#999;margin-top:30pt;border-top:1pt solid #ccc;padding-top:6pt}
+</style>
+</head>
+<body>
+<h1>案件要約書</h1>
+<p style="text-align:center;color:#666;font-size:9pt;margin-bottom:18pt">作成日: ${today}</p>
+${htmlBody}
+<div class="disclaimer">※本書はAIにより自動生成されたものです。内容の正確性については必ず原資料をご確認ください。</div>
+</body></html>`;
+
+  const blob = new Blob(['\ufeff' + doc], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '案件要約書_' + today.replace(/\//g, '') + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+// ===== Copy =====
+btnCopy.addEventListener('click', () => {
+  navigator.clipboard.writeText(rawResultText).then(() => {
+    btnCopy.textContent = 'コピーしました';
+    setTimeout(() => { btnCopy.textContent = 'テキストをコピー'; }, 2000);
+  });
+});
+
+// ===== Init =====
+loadApiKey();
+updateGenerateButton();
+</script>
+</body>
+</html>

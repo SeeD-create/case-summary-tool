@@ -11,12 +11,7 @@ body{font-family:'Segoe UI','Yu Gothic UI','Meiryo',sans-serif;background:#f0f2f
 h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
 .card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:24px 28px;margin-bottom:16px}
 .section-title{font-size:13px;font-weight:600;color:#555;margin-bottom:8px}
-
-/* API Key */
-.api-key-row{display:flex;gap:8px;align-items:center}
-.api-key-row input{flex:1;padding:8px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:14px;outline:none}
-.api-key-row input:focus{border-color:#4a6cf7}
-.api-key-row button,.btn{padding:8px 16px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s}
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s}
 .btn-sm{padding:6px 12px;font-size:13px}
 .btn-primary{background:#4a6cf7;color:#fff}
 .btn-primary:hover{background:#3a5ce5}
@@ -25,9 +20,6 @@ h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
 .btn-success:hover{background:#219a52}
 .btn-outline{background:#fff;color:#555;border:1.5px solid #ccc}
 .btn-outline:hover{background:#f5f5f5}
-.api-status{font-size:12px;margin-top:6px}
-.api-status.ok{color:#27ae60}
-.api-status.ng{color:#e74c3c}
 
 /* Dropzone */
 .dropzone{border:2.5px dashed #b0b8c9;border-radius:12px;padding:36px 20px;text-align:center;color:#888;font-size:15px;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:12px}
@@ -65,24 +57,14 @@ h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-text{font-size:14px}
 .error-msg{color:#e74c3c;font-size:14px;padding:10px;background:#fef2f2;border-radius:8px;margin-top:10px}
+.model-badge{text-align:center;margin-bottom:16px;font-size:11px;color:#888}
+.model-badge span{background:#eef2ff;color:#4a6cf7;padding:3px 10px;border-radius:12px;font-weight:600}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>案件要約ツール</h1>
-
-  <!-- API Key -->
-  <div class="card">
-    <div class="section-title">Gemini APIキー</div>
-    <div class="api-key-row">
-      <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
-      <button class="btn btn-primary btn-sm" id="btnSaveKey">保存</button>
-    </div>
-    <div class="api-status" id="apiStatus"></div>
-    <div style="font-size:11px;color:#aaa;margin-top:4px">
-      <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#4a6cf7">Google AI Studio</a> で無料取得できます。キーはブラウザ内のみに保存されます。
-    </div>
-  </div>
+  <div class="model-badge"><span>Gemini 2.5 Pro</span></div>
 
   <!-- File Upload -->
   <div class="card">
@@ -120,8 +102,7 @@ h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
 
 <script>
 // ===== Constants =====
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const WORKER_URL = 'https://case-summary-api.seed-legal.workers.dev';
 
 const SYSTEM_PROMPT = `あなたは日本の法律事務に精通した法務アシスタントです。
 弁護士が提出した証拠書類・資料を分析し、案件の要約と時系列を作成します。
@@ -175,9 +156,6 @@ let files = [];
 let rawResultText = '';
 
 // ===== Elements =====
-const apiKeyInput = document.getElementById('apiKeyInput');
-const btnSaveKey = document.getElementById('btnSaveKey');
-const apiStatus = document.getElementById('apiStatus');
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const fileListEl = document.getElementById('fileList');
@@ -190,33 +168,6 @@ const errorMsg = document.getElementById('errorMsg');
 const resultActions = document.getElementById('resultActions');
 const btnDownloadWord = document.getElementById('btnDownloadWord');
 const btnCopy = document.getElementById('btnCopy');
-
-// ===== API Key Management =====
-function loadApiKey() {
-  const key = localStorage.getItem('gemini_api_key') || '';
-  if (key) {
-    apiKeyInput.value = key;
-    apiStatus.textContent = '保存済み';
-    apiStatus.className = 'api-status ok';
-  }
-  return key;
-}
-
-function saveApiKey() {
-  const key = apiKeyInput.value.trim();
-  if (!key) return;
-  localStorage.setItem('gemini_api_key', key);
-  apiStatus.textContent = '保存しました';
-  apiStatus.className = 'api-status ok';
-  updateGenerateButton();
-}
-
-function getApiKey() {
-  return apiKeyInput.value.trim() || localStorage.getItem('gemini_api_key') || '';
-}
-
-btnSaveKey.addEventListener('click', saveApiKey);
-apiKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveApiKey(); });
 
 // ===== File Upload =====
 function isAccepted(f) {
@@ -258,18 +209,14 @@ function renderFileList() {
 
   const totalSize = files.reduce((s, f) => s + f.size, 0);
   if (files.length > 0) {
-    const estTokens = Math.round(totalSize / 4);
-    const estCostInput = (estTokens / 1000000) * 0.10;
-    const estCostOutput = (8000 / 1000000) * 0.40;
-    const estCostYen = Math.round((estCostInput + estCostOutput) * 150);
-    fileStats.textContent = `${files.length}ファイル / ${formatSize(totalSize)} / 推定費用: ${estCostYen < 1 ? '¥1以下' : '¥' + estCostYen}`;
+    fileStats.textContent = `${files.length}ファイル / ${formatSize(totalSize)}`;
   } else {
     fileStats.textContent = '';
   }
 }
 
 function updateGenerateButton() {
-  btnGenerate.disabled = files.length === 0 || !getApiKey();
+  btnGenerate.disabled = files.length === 0;
 }
 
 dropzone.addEventListener('click', () => fileInput.click());
@@ -340,7 +287,6 @@ function readEntriesRecursive(entries) {
     }
 
     for (const entry of entries) processEntry(entry);
-    // Initial check in case all entries are files (resolved synchronously after file() callbacks)
     setTimeout(() => check(), 50);
   });
 }
@@ -362,20 +308,18 @@ function getMimeType(file) {
   return 'image/jpeg';
 }
 
-// ===== Gemini API Call (Streaming) =====
-async function callGeminiStream(apiKey, parts, onChunk) {
-  const url = `${API_BASE}/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`;
-
+// ===== API Call via Cloudflare Worker (Streaming) =====
+async function callWorkerStream(parts, onChunk) {
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: [{ parts: parts }],
     generationConfig: {
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       temperature: 0.1,
     }
   };
 
-  const resp = await fetch(url, {
+  const resp = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -423,8 +367,7 @@ async function callGeminiStream(apiKey, parts, onChunk) {
 
 // ===== Generate Summary =====
 btnGenerate.addEventListener('click', async () => {
-  const apiKey = getApiKey();
-  if (!apiKey || files.length === 0) return;
+  if (files.length === 0) return;
 
   // Show loading
   resultArea.style.display = '';
@@ -448,10 +391,10 @@ btnGenerate.addEventListener('click', async () => {
     parts.push({ text: ANALYSIS_PROMPT });
 
     // Update loading text
-    loadingIndicator.querySelector('.loading-text').textContent = `${files.length}ファイルを分析中...`;
+    loadingIndicator.querySelector('.loading-text').textContent = `${files.length}ファイルを分析中...（Gemini 2.5 Pro）`;
 
-    // Call Gemini with streaming
-    rawResultText = await callGeminiStream(apiKey, parts, (partialText) => {
+    // Call Worker with streaming
+    rawResultText = await callWorkerStream(parts, (partialText) => {
       loadingIndicator.style.display = 'none';
       resultContent.innerHTML = renderMarkdown(partialText);
     });
@@ -464,11 +407,7 @@ btnGenerate.addEventListener('click', async () => {
   } catch (err) {
     loadingIndicator.style.display = 'none';
     errorMsg.style.display = '';
-    if (err.message.includes('API_KEY_INVALID') || err.message.includes('API key not valid')) {
-      errorMsg.textContent = 'APIキーが無効です。正しいキーを入力してください。';
-    } else {
-      errorMsg.textContent = 'エラー: ' + err.message;
-    }
+    errorMsg.textContent = 'エラー: ' + err.message;
   }
 
   btnGenerate.disabled = false;
@@ -619,7 +558,6 @@ btnCopy.addEventListener('click', () => {
 });
 
 // ===== Init =====
-loadApiKey();
 updateGenerateButton();
 </script>
 </body>

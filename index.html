@@ -89,9 +89,13 @@ h1{font-size:22px;color:#1a1a2e;text-align:center;margin-bottom:20px}
     <div class="section-title">案件資料（PDF / JPEG / PNG）</div>
     <div class="dropzone" id="dropzone">
       <span class="dropzone-icon">&#128206;</span>
-      ファイルをドラッグ＆ドロップ<br>
+      ファイル or フォルダをドラッグ＆ドロップ<br>
       <span style="font-size:12px;color:#aaa">またはクリックして選択（複数可）</span>
       <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" multiple>
+      <input type="file" id="folderInput" webkitdirectory style="display:none">
+    </div>
+    <div style="text-align:center;margin-top:-8px;margin-bottom:12px">
+      <button class="btn btn-outline btn-sm" id="btnSelectFolder" style="font-size:12px">フォルダを選択</button>
     </div>
     <div class="file-list" id="fileList"></div>
     <div class="file-stats" id="fileStats"></div>
@@ -271,8 +275,75 @@ function updateGenerateButton() {
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); addFiles(e.dataTransfer.files); });
+dropzone.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  const items = e.dataTransfer.items;
+  if (items && items.length > 0) {
+    const entries = [];
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) entries.push(entry);
+    }
+    if (entries.some(e => e.isDirectory)) {
+      const allFiles = await readEntriesRecursive(entries);
+      addFiles(allFiles);
+      return;
+    }
+  }
+  addFiles(e.dataTransfer.files);
+});
 fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+const folderInput = document.getElementById('folderInput');
+const btnSelectFolder = document.getElementById('btnSelectFolder');
+btnSelectFolder.addEventListener('click', e => { e.stopPropagation(); folderInput.click(); });
+folderInput.addEventListener('change', () => { addFiles(folderInput.files); folderInput.value = ''; });
+
+// Recursively read all files from directory entries
+function readEntriesRecursive(entries) {
+  return new Promise(resolve => {
+    const filePromises = [];
+    let pending = 0;
+
+    function processEntry(entry) {
+      if (entry.isFile) {
+        pending++;
+        filePromises.push(new Promise(res => {
+          entry.file(f => { pending--; res(f); });
+        }));
+      } else if (entry.isDirectory) {
+        pending++;
+        const reader = entry.createReader();
+        readAllEntries(reader, childEntries => {
+          for (const child of childEntries) processEntry(child);
+          pending--;
+          check();
+        });
+      }
+    }
+
+    function readAllEntries(reader, cb) {
+      let all = [];
+      function read() {
+        reader.readEntries(results => {
+          if (results.length === 0) { cb(all); return; }
+          all = all.concat(Array.from(results));
+          read();
+        });
+      }
+      read();
+    }
+
+    function check() {
+      if (pending === 0) resolve(Promise.all(filePromises));
+    }
+
+    for (const entry of entries) processEntry(entry);
+    // Initial check in case all entries are files (resolved synchronously after file() callbacks)
+    setTimeout(() => check(), 50);
+  });
+}
 
 // ===== File to Base64 =====
 function fileToBase64(file) {
